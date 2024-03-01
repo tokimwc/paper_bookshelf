@@ -6,12 +6,13 @@ from typing import Set
 import arxiv
 from openai import OpenAI
 import requests  
+# from dotenv import load_dotenv
 
+# .envファイルを読み込む
+# load_dotenv()
 
-# OpenAIのAPIキーを設定
-client = OpenAI(
-  api_key=os.environ['OPENAI_API_KEY'], 
-)
+# Point to the local server instead of using the API key
+client = OpenAI(base_url="http://localhost:1234/v1", api_key="not-needed")
 
 # arXivのデフォルトAPIクライアントを構築
 arxiv_client = arxiv.Client()
@@ -33,11 +34,11 @@ CATEGORIES = {
 
 SYSTEM = """
 ### 指示 ###
-論文の内容を理解した上で，重要なポイントを箇条書きで3点書いてください。
+論文の内容を理解した上で重要なポイントを箇条書きで3点書いて。
 
 ### 箇条書きの制約 ###
 - 最大3個
-- 日本語
+- 必ず日本語
 - 箇条書き1個を50文字以内
 
 ### 対象とする論文の内容 ###
@@ -52,7 +53,7 @@ SYSTEM = """
 """
 
 # パラメータ
-MODEL_NAME = "gpt-3.5-turbo"
+MODEL_NAME = "local-model"
 TEMPERATURE = 0.25
 MAX_RESULT = 10
 N_DAYS = 1
@@ -74,6 +75,7 @@ def get_summary(result: arxiv.Result) -> str:
                 model=MODEL_NAME,
                 messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": text}],
                 temperature=TEMPERATURE,
+                max_tokens=2000,
             )
             break
         except Exception as e:
@@ -113,7 +115,7 @@ def post_to_mattermost(mattermost_channel_id: str, message: str):
 
 # 論文の要約を取得し、Mattermostに投稿する
 def job(keyword: str, paper_hash: Set[str], is_debug: bool = False) -> Set[str]:
-    today = dt.datetime.today() - dt.timedelta(days=7)
+    today = dt.datetime.today() - dt.timedelta(days=3)
     base_date = today - dt.timedelta(days=1)
     query = QUERY_TEMPLATE.format(keyword, keyword, base_date.strftime("%Y%m%d%H%M%S"), today.strftime("%Y%m%d%H%M%S"))
     
@@ -130,7 +132,7 @@ def job(keyword: str, paper_hash: Set[str], is_debug: bool = False) -> Set[str]:
             continue
         result_list.append(result)
         paper_hash.add(result.title)
-        if len(result_list) == 10:
+        if len(result_list) == 5:
             break
     
     if len(result_list) == 0:
